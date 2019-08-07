@@ -179,13 +179,13 @@ public class Runner extends Configured implements Tool {
 					@Override
 					public void run() {
 						try {
-							System.out.println("工作链"+k+"已设定定时");
-							System.out.println("工作链"+k+"将于"+formatTime+"后运行");
+							System.out.println("HadoopLink:task link "+k+" is timed");
+							System.out.println("HadoopLink:task link "+k+" will run after"+formatTime);
 							Thread.sleep(millisecond);
-							System.out.println("工作链"+k+"开始运行");
+							System.out.println("HadoopLink:task link "+k+" start run");
 							Object o=JobRunnerUtil.run(jobcol,k);
 							exitFlagMap.put(o,1);
-							System.out.println("工作链"+k+"执行完毕");
+							System.out.println("HadoopLink:task link "+k+" is finished");
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
@@ -196,11 +196,11 @@ public class Runner extends Configured implements Tool {
 					@Override
 					public void run() {
 						try {
-							System.out.println("工作链"+k+"未设定定时");
-							System.out.println("工作链"+k+"开始运行");
+							System.out.println("HadoopLink:task link "+k+" is not timed");
+							System.out.println("HadoopLink:task link "+k+" start run");
 							Object o=JobRunnerUtil.run(jobcol,k);
 							exitFlagMap.put(o,1);
-							System.out.println("工作链"+k+"执行完毕");
+							System.out.println("HadoopLink:task link "+k+" is finished");
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
@@ -213,7 +213,7 @@ public class Runner extends Configured implements Tool {
 		while(exitFlagMap.size()!=count){
 			Thread.sleep(1000);
 		}
-		System.out.println("工作链全部结束，正在退出");
+		System.out.println("HadoopLink:all links finished,now quit");
 		return 0;
 		
 	}
@@ -231,16 +231,16 @@ public class Runner extends Configured implements Tool {
 		StringBuilder sb=new StringBuilder();
 		//判断
 		if(days!=0){
-			sb.append(days).append("天");
+			sb.append(days).append("days");
 		}
 		if(hours!=0){
-			sb.append(hours).append("小时");
+			sb.append(hours).append("hours");
 		}
 		if(minutes!=0){
-			sb.append(minutes).append("分钟");
+			sb.append(minutes).append("minutes");
 		}
 		if(seconds!=0){
-			sb.append(seconds).append("秒");
+			sb.append(seconds).append("seconds");
 		}
 		return sb.toString();
 	}
@@ -252,10 +252,10 @@ public class Runner extends Configured implements Tool {
 		taskListNum = getTaskListNum(conf);
 		if(taskListNum.size()==0){
 			try {
-				throw new PleaseInputYourCommandException("您没有输入输入路径，或输入路径格式错误");
+				throw new PleaseInputYourCommandException("You have not entered an input path, or the input path is malformed");
 			} catch (PleaseInputYourCommandException e) {
 				e.printStackTrace();
-				System.out.println("系统退出");
+				System.out.println("HadoopLink:quit");
 				System.exit(0);
 			}
 		}
@@ -316,7 +316,7 @@ public class Runner extends Configured implements Tool {
 								throw new DontFindAnotationException("don't find "+topClass.getName()+"'s innerClass Annotation");
 							} catch (DontFindAnotationException e) {
 								e.printStackTrace();
-								System.out.println("系统退出");
+								System.out.println("HadoopLink:quit");
 								System.exit(0);
 							}
 						}
@@ -351,7 +351,7 @@ public class Runner extends Configured implements Tool {
 							throw new DontFindFormatClassException("don't find your InputFormatClass");
 						} catch (DontFindFormatClassException e) {
 							e.printStackTrace();
-							System.out.println("系统退出");
+							System.out.println("HadoopLink:quit");
 							System.exit(0);
 						}
 					}
@@ -390,7 +390,7 @@ public class Runner extends Configured implements Tool {
 							throw new DontFindFormatClassException("don't find your InputFormatClass");
 						} catch (DontFindFormatClassException e) {
 							e.printStackTrace();
-							System.out.println("系统退出");
+							System.out.println("HadoopLink:quit");
 							System.exit(0);
 						}
 					}
@@ -469,7 +469,7 @@ public class Runner extends Configured implements Tool {
 						if (fs.exists(outputPath)) {
 							if(AutoDeleteOutPath){
 								fs.delete(outputPath, true);
-								System.out.println("任务链"+j+"的"+jobName+"的原始输出目录已经删除");
+								System.out.println("task link "+j+" "+jobName+" original output directory has been deleted");
 							}else{
 								//抛无法删除异常
 								try {
@@ -477,7 +477,7 @@ public class Runner extends Configured implements Tool {
 											+ " set delete tag false or you do not set delete tag");
 								} catch (YourOutputPathIsAlreadyExisted e) {
 									e.printStackTrace();
-									System.out.println("系统退出");
+									System.out.println("HadoopLink:quit");
 									System.exit(0);
 								}
 							}
@@ -719,7 +719,7 @@ public class Runner extends Configured implements Tool {
 						throw new DontFindAnotationException("don't find "+topClass.getName()+"'s Annotation:MyMapReduce");
 					} catch (DontFindAnotationException e) {
 						e.printStackTrace();
-						System.out.println("系统退出");
+						System.out.println("HadoopLink:quit");
 						System.exit(0);
 					}
 				} else if (parellelNum > 0) {
@@ -731,7 +731,7 @@ public class Runner extends Configured implements Tool {
 								throw new DontFindAnotationException("don't find "+topClass.getName()+"'s Annotation:MyMapReduce");
 							} catch (DontFindAnotationException e) {
 								e.printStackTrace();
-								System.out.println("系统退出");
+								System.out.println("HadoopLink:quit");
 								System.exit(0);
 							}
 						} else if (executeNum > 0) {
@@ -933,8 +933,8 @@ class JobRunnerUtil{
 			jrr.setRunTime(this.getLifeTime(runtime));
 			//打印信息
 			
-			System.out.println("工作链"+(jrr.isSuccess()?"SUCCESS":"FAILD"));
-			System.out.println("耗时:"+jrr.getRunTime());
+			System.out.println("task Link "+(jrr.isSuccess()?" SUCCESS":" FAILD"));
+			System.out.println("take time :"+jrr.getRunTime());
 			System.out.println(jrr.getCounterMap());
 			jobc.stop();
 			return jrr;
@@ -953,16 +953,16 @@ class JobRunnerUtil{
 			StringBuilder sb=new StringBuilder();
 			//判断
 			if(days!=0){
-				sb.append(days).append("天");
+				sb.append(days).append("days");
 			}
 			if(hours!=0){
-				sb.append(hours).append("小时");
+				sb.append(hours).append("hours");
 			}
 			if(minutes!=0){
-				sb.append(minutes).append("分钟");
+				sb.append(minutes).append("minutes");
 			}
 			if(seconds!=0){
-				sb.append(seconds).append("秒");
+				sb.append(seconds).append("seconds");
 			}
 			return sb.toString();
 		}
@@ -1020,7 +1020,7 @@ class JobRunnerResult{
 	}
 	//获取指定counter的值
 	public long getCounterVal(ControlledJob job,String gname,String cname){
-		//获取这个技术器
+		//获取这个计数器
 		Counter counter=getCounter(job,gname,cname);
 		return Utils.isEmpty(counter)?0L:counter.getValue();
 	}
