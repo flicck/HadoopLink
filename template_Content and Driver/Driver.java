@@ -5,7 +5,6 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import cn.runner.Runner;
 
-//通过反射调用Runner类的main方法
 public class Driver {
 	public static void main(String[] args) throws Throwable {
 		int exitCode=-1;
