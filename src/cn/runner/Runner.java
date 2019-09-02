@@ -58,7 +58,8 @@ import cn.annotation.MyMapper;
 import cn.annotation.MyPartitioner;
 import cn.annotation.MyReducer;
 import cn.annotation.NumOfReducer;
-//判断是window还是Linux环境下，并返回根目录的工具类
+
+import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl;
 
 @SuppressWarnings({ "unused","unchecked", "rawtypes" })
 public class Runner extends Configured implements Tool {
@@ -69,11 +70,15 @@ public class Runner extends Configured implements Tool {
 	private static String ScanPackage_FileInputFormat=null;
 	private static String ScanPackage_FileOutputFormat=null;
 	private static String TaskWorkBasePath=null;
+	private static String ScanPackage_EditConfigJob=null;
 	private static Boolean AutoDeleteOutPath=false;
 	//获取实际要求运行的工作链编号
 	private ArrayList<Integer> taskListNum=null;
 	//任务定时参数map,key为任务编号,value为任务等待的毫秒值
 	private HashMap<Integer,Long> fixedTime=new HashMap<>();
+	//保存getRootPathStatic返回的rootpath以供其他类使用
+	private static String rootPathStatic=null;
+	private EditConfigJob editConfigJob=null;
 	//类被加载的时候就获得Content.class到contentClass中
 	static{
 		try {
@@ -87,12 +92,14 @@ public class Runner extends Configured implements Tool {
 		Runner runner=new Runner();
 		//如果是windows环境
 		if("\\".equals(File.separator)){
+			getRootPathStatic(runner);
 			String path = runner.getClass().getClassLoader().getResource("//").getPath();
 			File dic = new File(path);
 			File[] files = dic.listFiles();
 			findFile(files);
 		}else if("/".equals(File.separator)){
-			String path=getRootPathStatic(runner);
+			getRootPathStatic(runner);
+			String path=rootPathStatic;
 			File dic=new File(path);
 			File[] files = dic.listFiles();
 			findFile(files);
@@ -117,12 +124,27 @@ public class Runner extends Configured implements Tool {
 						ContentClass=Class.forName(contentClassPath);
 					}
 					try {
+						Field[] fields = ContentClass.getFields();
+						HashSet<String> h1=new HashSet<>();
+						for(Field field:fields){
+							 String fieldstr = field.toString().split("\\.")[field.toString().split("\\.").length-1];
+							 h1.add(fieldstr);
+						}
+						//一定要配置的
 						MaxTaskLink=(int) ContentClass.getField("MAX_TASK_LINK").get(new Object());
 						ScanPackage_MapReduce=(String) ContentClass.getField("SCANPACKAGE_MAPREDUCE").get(new Object());
-						ScanPackage_FileInputFormat=(String) ContentClass.getField("SCANPACKAGE_FILEINPUTFORMAT").get(new Object());
-						ScanPackage_FileOutputFormat=(String) ContentClass.getField("SCANPACKAGE_FILEOUTPUTFORMAT").get(new Object());
 						TaskWorkBasePath=(String) ContentClass.getField("TASK_WORK_BASE_PATH").get(new Object());
 						AutoDeleteOutPath=(Boolean) ContentClass.getField("AUTODELETE_OUTPATH").get(new Object());
+						//可以选择配置的
+						if(h1.contains("SCANPACKAGE_FILEINPUTFORMAT")){
+							ScanPackage_FileInputFormat=(String) ContentClass.getField("SCANPACKAGE_FILEINPUTFORMAT").get(new Object());
+						}
+						if(h1.contains("SCANPACKAGE_FILEOUTPUTFORMAT")){
+							ScanPackage_FileOutputFormat=(String) ContentClass.getField("SCANPACKAGE_FILEOUTPUTFORMAT").get(new Object());
+						}
+						if(h1.contains("SCANPACKAGE_EDITCONFIGJOB")){
+							ScanPackage_EditConfigJob=(String) ContentClass.getField("SCANPACKAGE_EDITCONFIGJOB").get(new Object());
+						}
 					} catch (Exception e) {
 						e.printStackTrace();
 					}
@@ -142,16 +164,34 @@ public class Runner extends Configured implements Tool {
 	//run类
 	@Override
 	public int run(String[] args) throws Exception {
+		/**edit hadooplink1.1->step 1:获得通用的configuration
+		 * edit by wanghan 2019.9.1
+		 */
 		Configuration conf = this.getConf();
-		// final JobControl jobControl=new JobControl("GC1");
+		/**edit hadooplink1.1->step 2:获得用户自定义的EditConfigJob实现类
+		 * edit by wanghan 2019.9.1
+		 */	
+		if(ScanPackage_EditConfigJob!=null){
+			editConfigJob=this.getEditConfigJob();
+		}
+		/**edit hadooplink1.1->step 3:获得所有的任务链中的所有mr类
+		 * edit by wanghan 2019.9.1
+		 */		
 		HashMap[] grandList = this.getTaskMapList();
-		ArrayList<ControlledJob> controlledJobs = this.getControlledJobs(grandList, conf);
-		JobControl jc = new JobControl("GC");
-		//建一个最大jobControl的List池用于备用
+		/**edit hadooplink1.1->step 4:获得所有的controlledJob
+		 * edit by wanghan 2019.9.1
+		 */	
+		ArrayList<ControlledJob> controlledJobs = this.getControlledJobs(grandList, conf);	
+		/**edit hadooplink1.1->step 5:建一个jobContrilList池备用，size为MaxTaskLink加1
+		 * edit by wanghan 2019.9.1
+		 */	
 		ArrayList<JobControl> jobControlList=new ArrayList<>();
 		for(int i=1;i<=MaxTaskLink+1;i++){
 			jobControlList.add(new JobControl("工作链"+i));
 		}
+		/**edit hadooplink1.1->step 6:将controlledJobs中的controlledJob塞到JobControlList中
+		 * edit by wanghan 2019.9.1
+		 */
 		int count=1;
 		for(int i=0;i<controlledJobs.size();i++){
 			if(null!=controlledJobs.get(i)){
@@ -164,8 +204,9 @@ public class Runner extends Configured implements Tool {
 				}
 			}
 		}
-		
-		//根据taskListNum的size往JobRunnerUtil.run方法里面传JobControl,同时从taskListNum里面取出对应的工作链序号
+		/**edit hadooplink1.1->step 6:根据taskListNum的size往JobRunnerUtil.run方法里面传JobControl,同时从taskListNum里面取出对应的工作链序号
+		 * edit by wanghan 2019.9.1
+		 */
 		Map<Object, Integer> exitFlagMap = new Hashtable<>();
 		for(int i=1;i<=count;i++){
 			JobControl jobcol=jobControlList.get(i);
@@ -184,8 +225,14 @@ public class Runner extends Configured implements Tool {
 							Thread.sleep(millisecond);
 							System.out.println("HadoopLink:task link "+k+" start run");
 							Object o=JobRunnerUtil.run(jobcol,k);
+							/**edit hadooplink1.1->自定义对任意一个工作链的线程完成任务前的最后阶段执行其他的操作
+							 * edit by wanghan 2019.9.1
+							 */
+							if(editConfigJob!=null){
+							editConfigJob.editThread(conf, k);
+							}
 							exitFlagMap.put(o,1);
-							System.out.println("HadoopLink:task link "+k+" is finished");
+							
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
@@ -199,8 +246,14 @@ public class Runner extends Configured implements Tool {
 							System.out.println("HadoopLink:task link "+k+" is not timed");
 							System.out.println("HadoopLink:task link "+k+" start run");
 							Object o=JobRunnerUtil.run(jobcol,k);
+							/**edit hadooplink1.1->自定义对任意一个工作链的线程完成任务前的最后阶段执行其他的操作
+							 * edit by wanghan 2019.9.1
+							 */
+							if(editConfigJob!=null){
+								editConfigJob.editThread(conf, k);
+							}
 							exitFlagMap.put(o,1);
-							System.out.println("HadoopLink:task link "+k+" is finished");
+							
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
@@ -268,14 +321,17 @@ public class Runner extends Configured implements Tool {
 			taskList[j] = grandList[j];
 		}
 		ArrayList<ControlledJob> ControlledJobArray = new ArrayList<>();
-
+		
+		//外层循环，是所有的mr类
 		for (int j = 1; j < taskList.length; j++) {
 			HashMap tmpMap = taskList[j];
+			//里层循环是每一个工作链的mr类
 			if (null != tmpMap) {
 				TreeMap tm = new TreeMap(tmpMap);
 				Iterator it = tm.entrySet().iterator();
 
 				Map.Entry<Integer, ArrayList> entry = null;
+						
 				// 执行顺序标识
 				int i = 0;
 				// 保存上一个运行任务的输出路径和job
@@ -286,7 +342,7 @@ public class Runner extends Configured implements Tool {
 					Job tmpJob = null;
 					entry = (Entry) it.next();
 					// 先拿顺序第一的
-
+					
 					ArrayList classesList = entry.getValue();
 					Class topClass = (Class) classesList.get(0);
 					String str2 = topClass.getName();
@@ -294,6 +350,12 @@ public class Runner extends Configured implements Tool {
 					Configuration jobConf = new Configuration();
 					for (java.util.Map.Entry<String, String> srcConf : conf) {
 						jobConf.set(srcConf.getKey(), srcConf.getValue());
+					}
+					/**edit hadoolink1.1-》增加自定义configuration方法
+					 * 
+					 */	
+					if(editConfigJob!=null){
+						editConfigJob.editConfig(jobConf, j, i+1);
 					}
 					// 拿到了顶级类
 					try {
@@ -469,7 +531,7 @@ public class Runner extends Configured implements Tool {
 						if (fs.exists(outputPath)) {
 							if(AutoDeleteOutPath){
 								fs.delete(outputPath, true);
-								System.out.println("task link "+j+" "+jobName+" original output directory has been deleted");
+								System.out.println("HadoopLink:task link "+j+" "+jobName+" original output directory has been deleted");
 							}else{
 								//抛无法删除异常
 								try {
@@ -486,8 +548,13 @@ public class Runner extends Configured implements Tool {
 						e.printStackTrace();
 					}
 					FileOutputFormat.setOutputPath(tmpJob, outputPath);
+					/**edit hadooplink1.1->增加对job的修改方法
+					 * edit wanghan
+					 */
+					if(editConfigJob!=null){
+						editConfigJob.editJob(tmpJob, j, i+1);
+					}
 					
-				
 					
 					// 全部设置完毕，创建一个ControlledJob对象吧
 					ControlledJob controlledJob = null;
@@ -557,7 +624,7 @@ public class Runner extends Configured implements Tool {
 	}
 	//该方法通过传入的自定义format类的名字和扫描路径找到对应的类，返回绝对路径
 	private String findAbsoluteClassPath(String FormatClassName, String scanPackagePath) {
-		String rootPath=getRootPath(this);
+		String rootPath=rootPathStatic;
 		String path=rootPath+scanPackagePath;
 		File dic=new File(path);
 		File[] files=dic.listFiles();
@@ -616,11 +683,40 @@ public class Runner extends Configured implements Tool {
 	}
 	//该方法获得Mapper和Reducer的输出泛型
 	private Class[] getGenericClasses(Class innerClass) {
-
+		/**edit hadooplink1.1->新增对ParameterizedTypeImpl类的支持
+		 * edit by wanghan 2019.9.1
+		 */
 		Type type = innerClass.getGenericSuperclass();
 		ParameterizedType p = (ParameterizedType) type;
-		Class keyClass = (Class) p.getActualTypeArguments()[2];
-		Class valueClass = (Class) p.getActualTypeArguments()[3];
+		Class keyClass=null;
+		Class valueClass=null;
+		if(p.getActualTypeArguments().length==4){
+			 if (!(p.getActualTypeArguments()[2] instanceof ParameterizedTypeImpl)){ 
+				 keyClass = (Class) p.getActualTypeArguments()[2];
+			 }else{
+				 ParameterizedTypeImpl pti=(ParameterizedTypeImpl) p.getActualTypeArguments()[2];
+				 keyClass = pti.getRawType();
+			 }
+			 if (!(p.getActualTypeArguments()[3] instanceof ParameterizedTypeImpl)){ 
+				 valueClass = (Class) p.getActualTypeArguments()[3];
+			 }else{
+				 ParameterizedTypeImpl pti1=(ParameterizedTypeImpl) p.getActualTypeArguments()[3];
+				 valueClass = pti1.getRawType();
+			 }
+		}else if(p.getActualTypeArguments().length==2){
+			if (!(p.getActualTypeArguments()[0] instanceof ParameterizedTypeImpl)){ 
+				 keyClass = (Class) p.getActualTypeArguments()[0];
+			 }else{
+				 ParameterizedTypeImpl pti=(ParameterizedTypeImpl) p.getActualTypeArguments()[0];
+				 keyClass = pti.getRawType();
+			 }
+			 if (!(p.getActualTypeArguments()[1] instanceof ParameterizedTypeImpl)){ 
+				 valueClass = (Class) p.getActualTypeArguments()[1];
+			 }else{
+				 ParameterizedTypeImpl pti1=(ParameterizedTypeImpl) p.getActualTypeArguments()[1];
+				 valueClass = pti1.getRawType();
+			 }
+		}
 		Class[] classes = new Class[2];
 		classes[0] = keyClass;
 		classes[1] = valueClass;
@@ -653,13 +749,56 @@ public class Runner extends Configured implements Tool {
 		return 1;
 
 	}
+	//该方法返回一个EditConfigJob实例
+	public EditConfigJob getEditConfigJob() throws ClassNotFoundException{
+		String rootPath=rootPathStatic;
+		String path = rootPath+ScanPackage_EditConfigJob;
+		File dic = new File(path);
+		File[] files = dic.listFiles();
+		//指定的包中没有相关的类，返回null
+		if(files.length==0){
+			System.out.println("hhh shi wo la");
+			return null;
+		}
+		//如果指定的包中不止一个类，抛异常退出
+		if(files.length!=1){
+			try {
+				throw new YourEditConfigJobException("您SCANPACKAGE_EDITCONFIGJOB下的类多于1个");
+			} catch (YourEditConfigJobException e) {
+				e.printStackTrace();
+				System.out.println("HadoopLink:quit");
+				System.exit(0);
+			}
+		}
+		File editConfigJobClassFile = files[0];
+		Class editConfigJobClass=null;
+		if ("\\".equals(File.separator)){
+			String tmp = editConfigJobClassFile.getAbsolutePath().split("classes")[1];
+			tmp = tmp.replace("\\", ".");
+			tmp = tmp.substring(1, tmp.length() - 6);
+			editConfigJobClass = Class.forName(tmp);
+		}else if("/".equals(File.separator)){
+			String tmp=editConfigJobClassFile.getAbsolutePath().split("(hadoop-unjar)[0-9]+")[1];
+			tmp=tmp.replace("/", ".");
+			tmp=tmp.substring(1,tmp.length()-6);
+			editConfigJobClass=Class.forName(tmp);
+		}
+		EditConfigJob editConfigJob=null;
+		try {
+			editConfigJob=(EditConfigJob)editConfigJobClass.newInstance();
+		} catch (InstantiationException | IllegalAccessException e) {
+			e.printStackTrace();
+		}		
+		return editConfigJob;
+		
+	}
 	//该方法扫描所有MapReduce类及其内部类，将其最终加入到HashMap中
 	public HashMap[] getTaskMapList() throws ClassNotFoundException {
 		Runner test = new Runner();
 		// URL url =
 		// test.getClass().getClassLoader().getResource(Content.scanPackage);
 		//给一个方法传入这个test对象，让它通过判断是windows还是linux返回根目录
-		String rootPath=getRootPath(test);
+		String rootPath=rootPathStatic;
 		String path = rootPath+ScanPackage_MapReduce;
 		
 		File dic = new File(path);
@@ -753,44 +892,14 @@ public class Runner extends Configured implements Tool {
 		return grandList;
 	}
 	
-	//动态获得rootPath方法
-	private String getRootPath(Runner test) {
-		String rootPath=null;
-		String currentPath=null;
-		//windows环境下
-		if ("\\".equals(File.separator)) {
-			rootPath = test.getClass().getClassLoader().getResource("").getPath();
-			return rootPath;
-		//linux hadoop -jar命令下
-		}else if("/".equals(File.separator)){
-			//hadoop -jar无法像windows一样通过加载器获得路径，故先拿到本类的绝对路径
-			currentPath=test.getClass().getResource("").getPath();
-		//	currentPath="/tmp/hadoop-unjar123123/cn/runner/";
-			String[] strs=currentPath.split("/");
-			rootPath="";
-			for(String str:strs){
-				if(!str.matches("^(hadoop-unjar).*")){
-					str+="/";
-					rootPath+=str;
-				}else if(str.matches("^(hadoop-unjar).*")){
-					str+="/";
-					rootPath+=str;
-					break;
-				}
-			}
-			return rootPath;
-		}else{
-			return null;
-		}	
-	}
 	//静态获得rootPath方法
-	private static String getRootPathStatic(Runner test) {
+	private static void getRootPathStatic(Runner test) {
 		String rootPath=null;
 		String currentPath=null;
 		//windows环境下
 		if ("\\".equals(File.separator)) {
 			rootPath = test.getClass().getClassLoader().getResource("").getPath();
-			return rootPath;
+			rootPathStatic=rootPath;
 		//linux hadoop -jar命令下
 		}else if("/".equals(File.separator)){
 			//hadoop -jar无法像windows一样通过加载器获得路径，故先拿到本类的绝对路径
@@ -808,9 +917,8 @@ public class Runner extends Configured implements Tool {
 					break;
 				}
 			}
-			return rootPath;
-		}else{
-			return null;
+			rootPathStatic=rootPath;			
+		}else{			
 		}	
 	}
 	
@@ -872,6 +980,12 @@ class PleaseInputYourCommandException extends Exception{
 		super(message);
 	}
 }
+//没有输入命令异常类
+class YourEditConfigJobException extends Exception{
+	public YourEditConfigJobException(String message){
+		super(message);
+	}
+}
 //删除标识为false异常
 class YourOutputPathIsAlreadyExisted extends Exception{
 	public YourOutputPathIsAlreadyExisted(String message){
@@ -899,15 +1013,20 @@ class Utils{
 }
 //创建线程池--任务工作链的运行工具类
 class JobRunnerUtil{
-	//创建一个线程池
+	//创建一个监控线程池
 	private static ExecutorService es=Executors.newCachedThreadPool();
+	//创建一个ThreadLocal用于存放工作链序号
+	private static ThreadLocal<String> threadLocal=new ThreadLocal<>();
 	//JobRunnerResult是返回值
 	private static class JobCallable implements Callable<JobRunnerResult>{
 		//定义工作链对象
 		private JobControl jobc;
-		public JobCallable(JobControl jobc){
+		//定义工作链序号
+		private int index;
+		public JobCallable(JobControl jobc,int index){
 			super();
 			this.jobc=jobc;
+			this.index=index;
 		}
 		@Override
 		public JobRunnerResult call() throws Exception {
@@ -932,10 +1051,9 @@ class JobRunnerUtil{
 			//设置运行时间
 			jrr.setRunTime(this.getLifeTime(runtime));
 			//打印信息
-			
-			System.out.println("task Link "+(jrr.isSuccess()?" SUCCESS":" FAILD"));
-			System.out.println("take time :"+jrr.getRunTime());
-			System.out.println(jrr.getCounterMap());
+			String finalresult="HadoopLink:[task Link "+index+(jrr.isSuccess()?" SUCCESS":" FAILD")+"\n"+"  take time : "+jrr.getRunTime()+"\n"+
+					jrr.getCounterMap().toString().replace(",", "\n")+"]";
+			System.out.println(finalresult);
 			jobc.stop();
 			return jrr;
 		}
@@ -953,16 +1071,16 @@ class JobRunnerUtil{
 			StringBuilder sb=new StringBuilder();
 			//判断
 			if(days!=0){
-				sb.append(days).append("days");
+				sb.append(days).append(" days");
 			}
 			if(hours!=0){
-				sb.append(hours).append("hours");
+				sb.append(hours).append(" hours");
 			}
 			if(minutes!=0){
-				sb.append(minutes).append("minutes");
+				sb.append(minutes).append(" minutes");
 			}
 			if(seconds!=0){
-				sb.append(seconds).append("seconds");
+				sb.append(seconds).append(" seconds");
 			}
 			return sb.toString();
 		}
@@ -973,22 +1091,37 @@ class JobRunnerUtil{
 	public static JobRunnerResult run(JobControl jobc, int j)throws Exception{
 		//启动任务工作链
 		Thread t=new Thread(jobc);
-		t.start();
-		//线程池的作用就在这里了
-		Future<JobRunnerResult> f=es.submit(new JobCallable(jobc));
+		
+		t.start();		
+		
+		//线程池的作用就在这里了---用于监控任务链是否完成，如果完成的话就返回结果
+		JobRunnerResult.setIndex(j);
+		JobCallable jobCallable = new JobCallable(jobc,j);
+		
+		Future<JobRunnerResult> f=es.submit(jobCallable);
+		
 		return f.get();
 	}
 }
-//获得任务链中所有任务对应的counters类
+//获得任务链中所有任务对应的counters类以及线程的
 class JobRunnerResult{
+	
+	private static int index=0;
 	//任务运行结果
 	private boolean isSuccess;
 	//任务运行时间
 	private String runTime;
 	private Map<String,Counters> counterMap=new HashMap<String,Counters>();
 	//get set方法
+	
 	public boolean isSuccess(){
 		return isSuccess;
+	}
+	public static int getIndex() {
+		return index;
+	}
+	public static void setIndex(int index) {
+		JobRunnerResult.index = index;
 	}
 	public void setSuccess(boolean isSuccess){
 		this.isSuccess=isSuccess;
