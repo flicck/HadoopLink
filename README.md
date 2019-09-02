@@ -24,5 +24,5 @@ java jdk>=1.8
 　　+对任意一个工作链的线程完成任务前的最后阶段执行其他的操作  
 　　>>注意：您对Configuration和Job的单独设置如果和默认设置有冲突，将以您单独设置的为准（虽然提供了这样的自由度，但强烈建议您不要在这自定义工作链内每个mr类的输入输出路径，程序会根据配置文件自动帮您完成，如您自己定义非常容易造成混乱）  
 ##### 2.优化了输出结果，使得每一个任务链的输出结果都单独在一个[]中，避免同一时间完成多个任务导致不同任务日志输出的counters混杂  
-##### 3.增加了泛型中嵌套泛型的支持如Mapper<LongWritable,Text,AvroKey<GenericRecord>, NullWritable>  
+##### 3.增加了泛型中嵌套泛型的支持，如Mapper<LongWritable,Text,AvroKey\<GenericRecord\>, NullWritable>中的AvroKey\<GenericRecord\>  
 ##### 4.加快了执行速度
